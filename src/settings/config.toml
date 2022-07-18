@@ -1,0 +1,6 @@
+[strategy]
+currency_pair = { base = "ada", qoute = "usdt" }
+max_amount = 0.1
+
+
+    
