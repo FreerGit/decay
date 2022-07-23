@@ -1,4 +1,0 @@
-
-impl trait BybitClient: ExchangeClient {
-
-}

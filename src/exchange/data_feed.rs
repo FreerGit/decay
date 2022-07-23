@@ -1,5 +1,3 @@
-
-
 pub trait WebsocketClient {
-  pub fn new(&self)
+    fn new(&self);
 }
