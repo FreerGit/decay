@@ -1,5 +1,5 @@
 # decay
-HFT - Market Making, the beginning.
+We'll see.
 
 ## Notes
 config.toml - which exchange/pair etc
