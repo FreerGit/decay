@@ -7,7 +7,8 @@ use settings::settings::Settings;
 async fn main() -> () {
     //init settings
     // settings::Settings::new()
-    Settings::new();
+    let set = Settings::new();
+    println!("{:?}", set);
     //init client
     //init server for settings updates (@TODO l8r on)
     //start exectuor

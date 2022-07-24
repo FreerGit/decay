@@ -44,7 +44,7 @@ impl Settings {
             .add_source(File::with_name(CONFIG_PATH))
             .add_source(File::with_name(CREDENTIALS_PATH))
             .build()
-            .unwrap();
+            .expect("config.toml and/or credentials.toml missing from settings folder.");
 
         let strategy: Strategy = s.get("strategy").expect(&Self::config_err_info());
 
@@ -59,21 +59,24 @@ impl Settings {
 
             let key = table
                 .get("api_key")
-                .ok_or_else(|| anyhow!("No api_key entry in credentials.toml"));
+                .ok_or_else(|| anyhow!("No api_key entry in credentials.toml"))
+                .unwrap();
             let secret = table
                 .get("secret_key")
-                .ok_or_else(|| anyhow!("No secret_key entry in credentials.toml"));
+                .ok_or_else(|| anyhow!("No secret_key entry in credentials.toml"))
+                .unwrap();
             let id = table
                 .get("exchange_account_id")
-                .ok_or_else(|| anyhow!("No exchange_account_id entry in credentials.toml"));
-            println!("{}", k);
+                .ok_or_else(|| anyhow!("No exchange_account_id entry in credentials.toml"))
+                .unwrap();
 
-            // println!("{:#?}", v.into_table().unwrap().get(k));
-            // let y = Credentials {
-            //     secret_key: v.kind.to_string(),
-            //     api_key: String,
-            //     exchange_account_id: String,
-            // }
+            let cred = Credentials {
+                api_key: key.to_string(),
+                secret_key: secret.to_string(),
+                exchange_account_id: id.to_string(),
+            };
+
+            exchange_hmap.insert(k.to_string(), cred);
         }
 
         Settings {
