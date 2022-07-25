@@ -1,10 +1,8 @@
-use std::{collections::HashMap, hash::Hash};
+use std::collections::HashMap;
 
 use anyhow::anyhow;
-use config::{Config, File, Map};
+use config::{Config, File};
 use serde::Deserialize;
-
-use crate::exchange::exchange;
 
 pub static CONFIG_PATH: &str = "src/settings/config";
 pub static CREDENTIALS_PATH: &str = "src/settings/credentials";
@@ -117,6 +115,6 @@ mod tests {
 
     #[test]
     fn new_settings() {
-        let settings = Settings::new();
+        let _settings = Settings::new();
     }
 }

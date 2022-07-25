@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
 use crate::settings::settings::Settings;
 use async_trait::async_trait;
+use rust_decimal::Decimal;
 
 use super::{clients::bybit::BybitClient, error::Result, exchange::ExchangeType};
 
 use serde::{Deserialize, Serialize};
+
 #[derive(Serialize, Deserialize, Debug)]
 pub enum OrderType {
     Limit,
@@ -25,12 +29,12 @@ pub enum TimeInForce {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PlaceOrder {
-    side: String,
-    symbol: String,
-    order_type: OrderType,
-    qty: i32,
-    price: Option<i32>,
-    time_in_force: TimeInForce,
+    pub side: Side,
+    pub symbol: String,
+    pub order_type: OrderType,
+    pub qty: Decimal,
+    pub price: Option<i32>,
+    pub time_in_force: TimeInForce,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,9 +50,20 @@ pub struct OrderResult {
     order_status: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExchangeBalance {
+    pub balance: Decimal,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExchangeBalancesAndPositions {
+    pub balances: HashMap<String, ExchangeBalance>,
+    pub positions: Option<HashMap<String, ExchangeBalance>>,
+}
+
 #[async_trait]
 pub trait ExchangeClient {
-    async fn get_balance(&self, coin_name: Option<String>);
+    async fn get_balance(&self, coin_name: Option<String>) -> Result<ExchangeBalancesAndPositions>;
     async fn place_order(&self, order: PlaceOrder) -> Result<OrderResult>;
 }
 

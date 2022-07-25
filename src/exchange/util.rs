@@ -1,11 +1,13 @@
 use crate::exchange::error::Result;
 use hex;
 use ring::hmac;
-use std::time::SystemTime;
+use std::time::{SystemTime, SystemTimeError};
 
 #[inline]
-pub fn millseconds() -> Result<u128> {
-    let d = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
+pub fn millseconds() -> Result<u128, SystemTimeError> {
+    let d = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .unwrap();
     Ok(d.as_millis())
 }
 

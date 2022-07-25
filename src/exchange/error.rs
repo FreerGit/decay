@@ -23,11 +23,11 @@ pub enum ExchangeErrorType {
 pub struct ExchangeError {
     pub error_type: ExchangeErrorType,
     pub message: String,
-    pub code: Option<i32>,
+    pub code: Option<i64>,
 }
 
 impl ExchangeError {
-    pub fn new(error_type: ExchangeErrorType, message: String, code: Option<i32>) -> Self {
+    pub fn new(error_type: ExchangeErrorType, message: String, code: Option<i64>) -> Self {
         Self {
             error_type,
             message,
@@ -35,7 +35,7 @@ impl ExchangeError {
         }
     }
 
-    pub fn request_error(message: String, code: i32) -> Self {
+    pub fn request_error(message: String, code: i64) -> Self {
         ExchangeError::new(ExchangeErrorType::RequestError, message, Some(code))
     }
 
