@@ -9,10 +9,20 @@ use crate::exchange::util;
 use crate::settings::settings::{Credentials, Strategy};
 use crate::Settings;
 use async_trait::async_trait;
-use reqwest::{Client, Request, RequestBuilder, Url};
+use reqwest::{Body, Client, Request, RequestBuilder, Url};
 use rust_decimal::Decimal;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use serde_json::{json, Map, Value};
+
+// @NOTE https://stackoverflow.com/questions/72194721/rust-adding-a-field-to-an-existing-struct-with-serde-json
+// Basically the #[serde(flatten)] allows the In be inlined and the field be ignored.
+#[derive(Debug, Serialize, Deserialize)]
+struct SignedBody<In: Serialize> {
+    #[serde(flatten)]
+    body_field: In,
+    sign: String,
+}
 
 pub struct BybitClient {
     strategy: Strategy,
@@ -86,25 +96,60 @@ impl BybitClient {
                     };
 
                 //update the query string with the signature (sign=....)
-                let y = build.url_mut();
-                *y = signed_url;
+                *build.url_mut() = signed_url;
                 Ok(build)
             }
         }
     }
 
-    fn sign_auth_post(&self, endpoint: &str, builder: RequestBuilder) -> RequestBuilder {
+    // @NOTE https://github.com/serde-rs/json/issues/377
+    fn merge(a: &mut Value, b: &Value) {
+        match (a, b) {
+            (&mut Value::Object(ref mut a), &Value::Object(ref b)) => {
+                for (k, v) in b {
+                    Self::merge(a.entry(k.clone()).or_insert(Value::Null), v);
+                }
+            }
+            (a, b) => {
+                *a = b.clone();
+            }
+        }
+    }
+
+    fn sign_auth_post(&self, builder: RequestBuilder, req_body: Value) -> Result<Request> {
         let key = self.credentials.api_key.as_str();
         let secret = self.credentials.secret_key.as_str();
-        reqwest::RequestBuilder::query(
-            builder,
-            &[
-                ("api_key", key.to_string()),
-                ("recvWindow", self.recv_window.to_string()),
-                ("timestamp", util::millseconds().unwrap().to_string()),
-                ("sign", util::sign(&secret, endpoint)),
-            ],
-        )
+
+        let mut auth_body = json!({
+            "api_key": key.to_string(),
+            "timestamp": util::millseconds().unwrap().to_string(),
+        });
+
+        // Merge the request body with the api key and timestamp (mutation)
+        Self::merge(&mut auth_body, &req_body);
+
+        let signed_body = SignedBody {
+            body_field: &auth_body,
+            sign: util::sign(secret, &auth_body.to_string()),
+        };
+
+        match serde_json::to_string(&signed_body) {
+            Ok(final_body) => {
+                println!("{:#?}", final_body);
+                // auth_body.
+                let signed_builder = builder.body(final_body);
+
+                match signed_builder.build() {
+                    Ok(req) => Ok(req),
+                    Err(_) => Err(ExchangeError::unknown_error(
+                        &"Could not build the signed_builder".to_string(),
+                    )),
+                }
+            }
+            Err(_) => Err(ExchangeError::parsing_error(
+                "Could not deserialize signed_body".to_string(),
+            )),
+        }
     }
 
     pub async fn post<In, Out>(&self, body: In, endpoint: String, auth: bool) -> Result<Out>
@@ -112,18 +157,26 @@ impl BybitClient {
         In: Serialize,
         Out: DeserializeOwned,
     {
-        let builder = self
-            .client
-            .post(format!("{}{}", self.base_url, endpoint))
-            .body(serde_json::to_string(&body).unwrap());
+        let builder = self.client.post(format!("{}{}", self.base_url, endpoint));
 
-        let body_with_auth: RequestBuilder = match auth {
-            false => builder,
-            true => self.sign_auth_post(&endpoint, builder),
+        let json_body = match serde_json::to_value(body) {
+            Ok(b) => b,
+            Err(e) => {
+                return Err(ExchangeError::parsing_error(
+                    "Could not parse body into JSON value".to_string(),
+                ))
+            }
         };
 
-        // Self::send_and_parse::<Out>(&self, body_with_auth).await
-        todo!()
+        let body_with_auth: Request = match auth {
+            false => builder.build().unwrap(),
+            true => match self.sign_auth_post(builder, json_body) {
+                Ok(r) => r,
+                Err(e) => return Err(e),
+            },
+        };
+
+        Self::send_and_parse::<Out>(&self, body_with_auth).await
     }
 
     pub async fn get<Out>(
@@ -144,7 +197,7 @@ impl BybitClient {
                 Err(e) => return Err(e),
             },
         };
-        println!("{:#?}", body_with_auth);
+
         Self::send_and_parse::<Out>(&self, body_with_auth).await
     }
 
