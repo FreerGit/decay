@@ -30,11 +30,17 @@ async fn main() -> () {
         close_on_trigger: false,
     };
     let y = client.place_order(order).await.unwrap();
+    let order_id = &y.order_id;
     let z = client.get_order("BTCUSDT".to_string()).await.unwrap();
+    let cancel = client
+        .cancel_order("BTCUSDT".to_string(), order_id.to_string())
+        .await
+        .unwrap();
     println!("3");
     println!("{:#?}", x);
     println!("{:#?}", y);
     println!("{:#?}", z);
+    println!("{:#?}", cancel);
     //init server for settings updates (@TODO l8r on)
     //start exectuor
 }

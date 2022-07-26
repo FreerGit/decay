@@ -2,7 +2,8 @@ use std::collections::HashMap;
 use std::vec;
 
 use crate::exchange::client::{
-    ExchangeBalance, ExchangeBalancesAndPositions, ExchangeClient, Order, PlaceOrder,
+    ExchangeBalance, ExchangeBalancesAndPositions, ExchangeClient, Order, OrderCanceledId,
+    PlaceOrder,
 };
 use crate::exchange::error::{ExchangeError, Result};
 use crate::exchange::util;
@@ -52,15 +53,6 @@ pub struct BybitClient {
     pub client: Client,
     pub base_url: &'static str,
     pub recv_window: i32,
-}
-#[derive(Deserialize, Serialize)]
-pub struct Balance {
-    wallet_balance: Decimal,
-}
-#[derive(Deserialize, Serialize)]
-pub struct Balances {
-    #[serde(flatten)]
-    result_field: HashMap<String, Balance>,
 }
 
 impl BybitClient {
@@ -255,9 +247,20 @@ impl BybitClient {
 
 #[async_trait]
 impl ExchangeClient for BybitClient {
-    async fn get_balance(&self, coin_name: Option<String>) -> Result<ExchangeBalancesAndPositions> {
+    async fn get_balance(&self, symbol: Option<String>) -> Result<ExchangeBalancesAndPositions> {
         const ENDPOINT: &'static str = "/v2/private/wallet/balance";
-        let params = match coin_name {
+
+        #[derive(Deserialize, Serialize)]
+        pub struct Balance {
+            wallet_balance: Decimal,
+        }
+        #[derive(Deserialize, Serialize)]
+        pub struct Balances {
+            #[serde(flatten)]
+            result_field: HashMap<String, Balance>,
+        }
+
+        let params = match symbol {
             None => vec![],
             Some(name) => vec![("coin", name)],
         };
@@ -284,26 +287,36 @@ impl ExchangeClient for BybitClient {
     }
     async fn place_order(&self, order: PlaceOrder) -> Result<Order> {
         const ENDPOINT: &'static str = "/private/linear/order/create";
-        let res = self.post::<PlaceOrder, Order>(order, ENDPOINT, true).await;
-        match res {
-            Ok(wrapper) => Ok(wrapper.result),
-            Err(e) => Err(e),
-        }
+        self.post::<PlaceOrder, Order>(order, ENDPOINT, true)
+            .await
+            .and_then(|v| Ok(v.result))
     }
 
-    async fn get_order(&self, coin_name: String) -> Result<Vec<Order>> {
+    async fn get_order(&self, symbol: String) -> Result<Vec<Order>> {
+        const ENDPOINT: &'static str = "/private/linear/order/list";
+
         #[derive(Debug, Serialize, Deserialize)]
         struct OrderList {
             data: Vec<Order>,
         }
 
-        const ENDPOINT: &'static str = "/private/linear/order/list";
-        match self
-            .get::<OrderList>(vec![("symbol", coin_name)], ENDPOINT, true)
+        self.get::<OrderList>(vec![("symbol", symbol)], ENDPOINT, true)
             .await
-        {
-            Ok(order) => Ok(order.result.data),
-            Err(e) => Err(e),
+            .and_then(|v| Ok(v.result.data))
+    }
+
+    async fn cancel_order(&self, symbol: String, order_id: String) -> Result<OrderCanceledId> {
+        const ENDPOINT: &'static str = "/private/linear/order/cancel";
+
+        #[derive(Serialize)]
+        struct CancelOrder {
+            symbol: String,
+            order_id: String,
         }
+        let to_cancel = CancelOrder { symbol, order_id };
+
+        self.post::<CancelOrder, OrderCanceledId>(to_cancel, ENDPOINT, true)
+            .await
+            .and_then(|v| Ok(v.result))
     }
 }

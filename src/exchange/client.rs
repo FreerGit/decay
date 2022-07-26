@@ -41,15 +41,15 @@ pub struct PlaceOrder {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Order {
-    user_id: i32,
-    order_id: String,
-    symbol: String,
-    side: Side,
-    order_type: OrderType,
-    price: i32,
-    qty: Decimal,
+    pub user_id: i32,
+    pub order_id: String,
+    pub symbol: String,
+    pub side: Side,
+    pub order_type: OrderType,
+    pub price: i32,
+    pub qty: Decimal,
     // @TODO Type order status?
-    order_status: String,
+    pub order_status: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -63,11 +63,17 @@ pub struct ExchangeBalancesAndPositions {
     pub positions: Option<HashMap<String, ExchangeBalance>>,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct OrderCanceledId {
+    pub order_id: String,
+}
+
 #[async_trait]
 pub trait ExchangeClient {
-    async fn get_balance(&self, coin_name: Option<String>) -> Result<ExchangeBalancesAndPositions>;
+    async fn get_balance(&self, symbol: Option<String>) -> Result<ExchangeBalancesAndPositions>;
     async fn place_order(&self, order: PlaceOrder) -> Result<Order>;
-    async fn get_order(&self, coin_name: String) -> Result<Vec<Order>>;
+    async fn get_order(&self, symbol: String) -> Result<Vec<Order>>;
+    async fn cancel_order(&self, symbol: String, order_id: String) -> Result<OrderCanceledId>;
 }
 
 pub fn init_exchange_client(e_type: ExchangeType, settings: Settings) -> impl ExchangeClient {
