@@ -40,7 +40,7 @@ pub struct PlaceOrder {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct OrderResult {
+pub struct Order {
     user_id: i32,
     order_id: String,
     symbol: String,
@@ -66,7 +66,8 @@ pub struct ExchangeBalancesAndPositions {
 #[async_trait]
 pub trait ExchangeClient {
     async fn get_balance(&self, coin_name: Option<String>) -> Result<ExchangeBalancesAndPositions>;
-    async fn place_order(&self, order: PlaceOrder) -> Result<OrderResult>;
+    async fn place_order(&self, order: PlaceOrder) -> Result<Order>;
+    async fn get_order(&self, coin_name: String) -> Result<Vec<Order>>;
 }
 
 pub fn init_exchange_client(e_type: ExchangeType, settings: Settings) -> impl ExchangeClient {

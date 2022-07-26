@@ -30,9 +30,11 @@ async fn main() -> () {
         close_on_trigger: false,
     };
     let y = client.place_order(order).await.unwrap();
+    let z = client.get_order("BTCUSDT".to_string()).await.unwrap();
     println!("3");
-    println!("{:?}", x);
-    println!("{:?}", y);
+    println!("{:#?}", x);
+    println!("{:#?}", y);
+    println!("{:#?}", z);
     //init server for settings updates (@TODO l8r on)
     //start exectuor
 }

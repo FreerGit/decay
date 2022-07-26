@@ -1,10 +1,8 @@
 use std::collections::HashMap;
-use std::io::Read;
-use std::ops::Not;
 use std::vec;
 
 use crate::exchange::client::{
-    ExchangeBalance, ExchangeBalancesAndPositions, ExchangeClient, OrderResult, PlaceOrder,
+    ExchangeBalance, ExchangeBalancesAndPositions, ExchangeClient, Order, PlaceOrder,
 };
 use crate::exchange::error::{ExchangeError, Result};
 use crate::exchange::util;
@@ -15,7 +13,7 @@ use reqwest::{Client, Request, RequestBuilder, Url};
 use rust_decimal::Decimal;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 
 // @NOTE https://stackoverflow.com/questions/72194721/rust-adding-a-field-to-an-existing-struct-with-serde-json
 // Basically the #[serde(flatten)] allows the In be inlined and the field be ignored.
@@ -154,7 +152,7 @@ impl BybitClient {
         });
 
         // Merge the request body with the api key and timestamp (mutation)
-        Self::merge(&mut auth_body, &serde_json::to_value(&req_body).unwrap());
+        Self::merge(&mut auth_body, &serde_json::to_value(req_body).unwrap());
 
         // Turning body into a query string... stuck on how to do this in a non-shitty way...
         let mut query_string: String = "".to_string();
@@ -166,7 +164,6 @@ impl BybitClient {
                 query_string.push_str(format!("&{}={}", k, v.to_string()).as_str());
             }
             first = false;
-            println!("{} - {}", k, v.to_string());
         }
 
         query_string.retain(|c| c != '\"');
@@ -177,7 +174,6 @@ impl BybitClient {
         };
 
         let signed_builder = builder.json(&signed_body);
-
         match signed_builder.build() {
             Ok(req) => Ok(req),
             Err(_) => Err(ExchangeError::unknown_error(
@@ -186,12 +182,7 @@ impl BybitClient {
         }
     }
 
-    pub async fn post<In, Out>(
-        &self,
-        body: In,
-        endpoint: String,
-        auth: bool,
-    ) -> Result<RespWrapper<Out>>
+    async fn post<In, Out>(&self, body: In, endpoint: &str, auth: bool) -> Result<RespWrapper<Out>>
     where
         In: Serialize,
         Out: Serialize,
@@ -210,10 +201,10 @@ impl BybitClient {
         Self::send_and_parse::<Out>(&self, body_with_auth).await
     }
 
-    pub async fn get<Out>(
+    async fn get<Out>(
         &self,
         parameters: Vec<(&str, String)>,
-        endpoint: String,
+        endpoint: &str,
         auth: bool,
     ) -> Result<RespWrapper<Out>>
     where
@@ -238,28 +229,20 @@ impl BybitClient {
         Out: Serialize,
         Out: DeserializeOwned,
     {
-        println!("{:#?}", request);
-        let res = self.client.execute(request).await;
-        match res {
-            Ok(r) => {
-                let resp = r.text().await;
-                match resp {
-                    Ok(string) => {
-                        let json = serde_json::from_str(&string);
-                        match json {
-                            Err(e) => {
-                                let err = format!(
-                                    "When parsing this json:\n {:?} \n Encountered this error: {}\n",
-                                    string, e
-                                );
-                                Err(ExchangeError::parsing_error(err))
-                            }
-                            Ok(deserialized) => Ok(deserialized),
-                        }
+        match self.client.execute(request).await {
+            Ok(r) => match r.text().await {
+                Ok(string) => match serde_json::from_str(&string) {
+                    Err(e) => {
+                        let err = format!(
+                            "When parsing this json:\n {:?} \n Encountered this error: {}\n",
+                            string, e
+                        );
+                        Err(ExchangeError::parsing_error(err))
                     }
-                    Err(e) => Err(ExchangeError::parsing_error(e.to_string())),
-                }
-            }
+                    Ok(deserialized) => Ok(deserialized),
+                },
+                Err(e) => Err(ExchangeError::parsing_error(e.to_string())),
+            },
             Err(e) => {
                 return Err(ExchangeError::request_error(
                     e.to_string(),
@@ -278,9 +261,7 @@ impl ExchangeClient for BybitClient {
             None => vec![],
             Some(name) => vec![("coin", name)],
         };
-        let res = self
-            .get::<Balances>(params, ENDPOINT.to_string(), true)
-            .await;
+        let res = self.get::<Balances>(params, ENDPOINT, true).await;
         let convert_balances = match res {
             Err(e) => Err(e),
             Ok(balances) => Ok(ExchangeBalancesAndPositions {
@@ -301,13 +282,27 @@ impl ExchangeClient for BybitClient {
         };
         return convert_balances;
     }
-    async fn place_order(&self, order: PlaceOrder) -> Result<OrderResult> {
+    async fn place_order(&self, order: PlaceOrder) -> Result<Order> {
         const ENDPOINT: &'static str = "/private/linear/order/create";
-        let res = self
-            .post::<PlaceOrder, OrderResult>(order, ENDPOINT.to_string(), true)
-            .await;
+        let res = self.post::<PlaceOrder, Order>(order, ENDPOINT, true).await;
         match res {
             Ok(wrapper) => Ok(wrapper.result),
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn get_order(&self, coin_name: String) -> Result<Vec<Order>> {
+        #[derive(Debug, Serialize, Deserialize)]
+        struct OrderList {
+            data: Vec<Order>,
+        }
+
+        const ENDPOINT: &'static str = "/private/linear/order/list";
+        match self
+            .get::<OrderList>(vec![("symbol", coin_name)], ENDPOINT, true)
+            .await
+        {
+            Ok(order) => Ok(order.result.data),
             Err(e) => Err(e),
         }
     }
