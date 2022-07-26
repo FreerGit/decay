@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::io::Read;
+use std::ops::Not;
 use std::vec;
 
 use crate::exchange::client::{
@@ -9,11 +11,11 @@ use crate::exchange::util;
 use crate::settings::settings::{Credentials, Strategy};
 use crate::Settings;
 use async_trait::async_trait;
-use reqwest::{Body, Client, Request, RequestBuilder, Url};
+use reqwest::{Client, Request, RequestBuilder, Url};
 use rust_decimal::Decimal;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 // @NOTE https://stackoverflow.com/questions/72194721/rust-adding-a-field-to-an-existing-struct-with-serde-json
 // Basically the #[serde(flatten)] allows the In be inlined and the field be ignored.
@@ -22,6 +24,20 @@ struct SignedBody<In: Serialize> {
     #[serde(flatten)]
     body_field: In,
     sign: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct AuthBody {
+    api_key: String,
+    timestamp: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct UnsignedBody<In: Serialize> {
+    #[serde(flatten)]
+    auth_field: AuthBody,
+    #[serde(flatten)]
+    body_field: In,
 }
 
 pub struct BybitClient {
@@ -116,9 +132,17 @@ impl BybitClient {
         }
     }
 
-    fn sign_auth_post(&self, builder: RequestBuilder, req_body: Value) -> Result<Request> {
+    fn sign_auth_post<In>(&self, builder: RequestBuilder, req_body: In) -> Result<Request>
+    where
+        In: Serialize,
+    {
         let key = self.credentials.api_key.as_str();
         let secret = self.credentials.secret_key.as_str();
+
+        // let auth_body = AuthBody {
+        //     api_key: key.to_string(),
+        //     timestamp: util::millseconds().unwrap().to_string(),
+        // };
 
         let mut auth_body = json!({
             "api_key": key.to_string(),
@@ -126,28 +150,42 @@ impl BybitClient {
         });
 
         // Merge the request body with the api key and timestamp (mutation)
-        Self::merge(&mut auth_body, &req_body);
+        Self::merge(&mut auth_body, &serde_json::to_value(&req_body).unwrap());
 
+        // Turning body into a query string... stuck on how to do this in a non-shitty way...
+        let mut query_string: String = "".to_string();
+        let mut first = true;
+        for (k, v) in auth_body.as_object().unwrap() {
+            if first {
+                query_string.push_str(format!("{}={}", k, v.to_string()).as_str());
+            } else {
+                query_string.push_str(format!("&{}={}", k, v.to_string()).as_str());
+            }
+            first = false;
+            println!("{} - {}", k, v.to_string());
+        }
+
+        query_string.retain(|c| c != '\"');
+
+        // parsed_unsigned_body.to_string();
+        println!("{}", query_string);
         let signed_body = SignedBody {
             body_field: &auth_body,
-            sign: util::sign(secret, &auth_body.to_string()),
+            sign: util::sign(secret, &query_string),
         };
 
-        match serde_json::to_string(&signed_body) {
-            Ok(final_body) => {
-                println!("{:#?}", final_body);
-                // auth_body.
-                let signed_builder = builder.body(final_body);
-
-                match signed_builder.build() {
-                    Ok(req) => Ok(req),
-                    Err(_) => Err(ExchangeError::unknown_error(
-                        &"Could not build the signed_builder".to_string(),
-                    )),
-                }
+        // auth_body.
+        // println!("conversioln -> {:?}", builder.body(final_body));
+        let signed_builder = builder.json(&signed_body);
+        println!("signed_builder -> {:#?}", signed_builder);
+        match signed_builder.build() {
+            Ok(req) => {
+                println!("FDSFSDFSDFSDFSDF");
+                println!("{:#?}", req.body().into_iter());
+                Ok(req)
             }
-            Err(_) => Err(ExchangeError::parsing_error(
-                "Could not deserialize signed_body".to_string(),
+            Err(_) => Err(ExchangeError::unknown_error(
+                &"Could not build the signed_builder".to_string(),
             )),
         }
     }
@@ -159,18 +197,9 @@ impl BybitClient {
     {
         let builder = self.client.post(format!("{}{}", self.base_url, endpoint));
 
-        let json_body = match serde_json::to_value(body) {
-            Ok(b) => b,
-            Err(e) => {
-                return Err(ExchangeError::parsing_error(
-                    "Could not parse body into JSON value".to_string(),
-                ))
-            }
-        };
-
         let body_with_auth: Request = match auth {
             false => builder.build().unwrap(),
-            true => match self.sign_auth_post(builder, json_body) {
+            true => match self.sign_auth_post(builder, body) {
                 Ok(r) => r,
                 Err(e) => return Err(e),
             },
@@ -205,6 +234,7 @@ impl BybitClient {
     where
         Out: DeserializeOwned,
     {
+        println!("{:#?}", request);
         let res = self.client.execute(request).await;
         match res {
             Ok(r) => {
@@ -268,7 +298,7 @@ impl ExchangeClient for BybitClient {
         return convert_balances;
     }
     async fn place_order(&self, order: PlaceOrder) -> Result<OrderResult> {
-        const ENDPOINT: &'static str = "/v2/private/order/create";
+        const ENDPOINT: &'static str = "/private/linear/order/create";
         let res = self
             .post::<PlaceOrder, OrderResult>(order, ENDPOINT.to_string(), true)
             .await;

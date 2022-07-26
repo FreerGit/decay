@@ -26,6 +26,8 @@ async fn main() -> () {
         qty: dec!(0.001),
         price: Some(22200),
         time_in_force: TimeInForce::GoodTillCancel,
+        reduce_only: false,
+        close_on_trigger: false,
     };
     let y = client.place_order(order).await.unwrap();
     println!("3");

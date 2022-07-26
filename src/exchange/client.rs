@@ -35,6 +35,8 @@ pub struct PlaceOrder {
     pub qty: Decimal,
     pub price: Option<i32>,
     pub time_in_force: TimeInForce,
+    pub reduce_only: bool,
+    pub close_on_trigger: bool,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
