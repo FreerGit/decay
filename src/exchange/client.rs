@@ -47,7 +47,7 @@ pub struct OrderResult {
     side: Side,
     order_type: OrderType,
     price: i32,
-    qty: i32,
+    qty: Decimal,
     // @TODO Type order status?
     order_status: String,
 }

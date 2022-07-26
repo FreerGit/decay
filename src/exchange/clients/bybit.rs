@@ -40,6 +40,14 @@ struct UnsignedBody<In: Serialize> {
     body_field: In,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct RespWrapper<Body: Serialize> {
+    ret_code: i32,
+    ret_msg: String,
+    result: Body,
+    time_now: String,
+}
+
 pub struct BybitClient {
     strategy: Strategy,
     credentials: Credentials,
@@ -47,13 +55,14 @@ pub struct BybitClient {
     pub base_url: &'static str,
     pub recv_window: i32,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Balance {
     wallet_balance: Decimal,
 }
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct Balances {
-    result: HashMap<String, Balance>,
+    #[serde(flatten)]
+    result_field: HashMap<String, Balance>,
 }
 
 impl BybitClient {
@@ -139,11 +148,6 @@ impl BybitClient {
         let key = self.credentials.api_key.as_str();
         let secret = self.credentials.secret_key.as_str();
 
-        // let auth_body = AuthBody {
-        //     api_key: key.to_string(),
-        //     timestamp: util::millseconds().unwrap().to_string(),
-        // };
-
         let mut auth_body = json!({
             "api_key": key.to_string(),
             "timestamp": util::millseconds().unwrap().to_string(),
@@ -167,32 +171,30 @@ impl BybitClient {
 
         query_string.retain(|c| c != '\"');
 
-        // parsed_unsigned_body.to_string();
-        println!("{}", query_string);
         let signed_body = SignedBody {
             body_field: &auth_body,
             sign: util::sign(secret, &query_string),
         };
 
-        // auth_body.
-        // println!("conversioln -> {:?}", builder.body(final_body));
         let signed_builder = builder.json(&signed_body);
-        println!("signed_builder -> {:#?}", signed_builder);
+
         match signed_builder.build() {
-            Ok(req) => {
-                println!("FDSFSDFSDFSDFSDF");
-                println!("{:#?}", req.body().into_iter());
-                Ok(req)
-            }
+            Ok(req) => Ok(req),
             Err(_) => Err(ExchangeError::unknown_error(
                 &"Could not build the signed_builder".to_string(),
             )),
         }
     }
 
-    pub async fn post<In, Out>(&self, body: In, endpoint: String, auth: bool) -> Result<Out>
+    pub async fn post<In, Out>(
+        &self,
+        body: In,
+        endpoint: String,
+        auth: bool,
+    ) -> Result<RespWrapper<Out>>
     where
         In: Serialize,
+        Out: Serialize,
         Out: DeserializeOwned,
     {
         let builder = self.client.post(format!("{}{}", self.base_url, endpoint));
@@ -213,8 +215,9 @@ impl BybitClient {
         parameters: Vec<(&str, String)>,
         endpoint: String,
         auth: bool,
-    ) -> Result<Out>
+    ) -> Result<RespWrapper<Out>>
     where
+        Out: Serialize,
         Out: DeserializeOwned,
     {
         let builder = self.client.get(format!("{}{}", self.base_url, endpoint));
@@ -230,8 +233,9 @@ impl BybitClient {
         Self::send_and_parse::<Out>(&self, body_with_auth).await
     }
 
-    async fn send_and_parse<Out>(&self, request: Request) -> Result<Out>
+    async fn send_and_parse<Out>(&self, request: Request) -> Result<RespWrapper<Out>>
     where
+        Out: Serialize,
         Out: DeserializeOwned,
     {
         println!("{:#?}", request);
@@ -282,7 +286,7 @@ impl ExchangeClient for BybitClient {
             Ok(balances) => Ok(ExchangeBalancesAndPositions {
                 balances: {
                     let mut map: HashMap<String, ExchangeBalance> = HashMap::new();
-                    for (k, v) in balances.result.iter() {
+                    for (k, v) in balances.result.result_field.iter() {
                         map.insert(
                             k.to_string(),
                             ExchangeBalance {
@@ -302,6 +306,9 @@ impl ExchangeClient for BybitClient {
         let res = self
             .post::<PlaceOrder, OrderResult>(order, ENDPOINT.to_string(), true)
             .await;
-        return res;
+        match res {
+            Ok(wrapper) => Ok(wrapper.result),
+            Err(e) => Err(e),
+        }
     }
 }
