@@ -1,12 +1,12 @@
-mod exchange;
+mod exchanges;
 mod settings;
 
 use rust_decimal_macros::dec;
 use settings::settings::Settings;
 
-use crate::exchange::{
-    client::{init_exchange_client, ExchangeClient, OrderType, PlaceOrder, Side, TimeInForce},
-    exchange::ExchangeType,
+use crate::exchanges::{
+    r#trait::{ExchangeClient, OrderType, PlaceOrder, Side, TimeInForce},
+    rest_client::{init_exchange_client, ExchangeType},
 };
 
 #[tokio::main]

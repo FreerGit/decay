@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use std::vec;
 
-use crate::exchange::client::{
+use crate::exchanges::error::{ExchangeError, Result};
+use crate::exchanges::r#trait::{
     ExchangeBalance, ExchangeBalancesAndPositions, ExchangeClient, Order, OrderCanceledId,
     PlaceOrder,
 };
-use crate::exchange::error::{ExchangeError, Result};
-use crate::exchange::util;
+use crate::exchanges::util;
 use crate::settings::settings::{Credentials, Strategy};
 use crate::Settings;
 use async_trait::async_trait;
@@ -14,7 +14,7 @@ use reqwest::{Client, Request, RequestBuilder, Url};
 use rust_decimal::Decimal;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 
 // @NOTE https://stackoverflow.com/questions/72194721/rust-adding-a-field-to-an-existing-struct-with-serde-json
 // Basically the #[serde(flatten)] allows the In be inlined and the field be ignored.

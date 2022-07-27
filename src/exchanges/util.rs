@@ -1,4 +1,4 @@
-use crate::exchange::error::Result;
+use super::error::Result;
 use hex;
 use ring::hmac;
 use std::time::{SystemTime, SystemTimeError};

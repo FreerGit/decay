@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 
-use crate::settings::settings::Settings;
 use async_trait::async_trait;
 use rust_decimal::Decimal;
-
-use super::{clients::bybit::BybitClient, error::Result, exchange::ExchangeType};
-
 use serde::{Deserialize, Serialize};
+
+use super::error::Result;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum OrderType {
@@ -68,19 +66,11 @@ pub struct OrderCanceledId {
     pub order_id: String,
 }
 
+// Rest client
 #[async_trait]
 pub trait ExchangeClient {
     async fn get_balance(&self, symbol: Option<String>) -> Result<ExchangeBalancesAndPositions>;
     async fn place_order(&self, order: PlaceOrder) -> Result<Order>;
     async fn get_order(&self, symbol: String) -> Result<Vec<Order>>;
     async fn cancel_order(&self, symbol: String, order_id: String) -> Result<OrderCanceledId>;
-}
-
-pub fn init_exchange_client(e_type: ExchangeType, settings: Settings) -> impl ExchangeClient {
-    match e_type {
-        // @TODO propegate recv_window (200)
-        ExchangeType::Bybit => BybitClient::new(settings, 200),
-        ExchangeType::Binance => todo!(),
-        ExchangeType::Ftx => todo!(),
-    }
 }
